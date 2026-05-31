@@ -6,13 +6,13 @@
 // the new files will be downloaded automatically on next load.
 // ============================================================
 const CACHE_VERSION = 'carnival-v1';
+const BASE = '/carnival-round';
 
 const ASSETS_TO_CACHE = [
-  '/index.html',
-  '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  // Google Fonts — cached on first load, served offline after
+  BASE + '/index.html',
+  BASE + '/manifest.json',
+  BASE + '/icons/icon-192.png',
+  BASE + '/icons/icon-512.png',
   'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap',
 ];
 
@@ -20,9 +20,10 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_VERSION).then(cache => {
-      // Cache local assets first (must succeed)
-      return cache.addAll(['/index.html', '/manifest.json']).then(() => {
-        // Cache remote assets best-effort (fonts may fail offline on first install)
+      return cache.addAll([
+        BASE + '/index.html',
+        BASE + '/manifest.json',
+      ]).then(() => {
         return Promise.allSettled(
           ASSETS_TO_CACHE.filter(url => url.startsWith('https')).map(url =>
             fetch(url).then(res => cache.put(url, res)).catch(() => {})
@@ -46,16 +47,13 @@ self.addEventListener('activate', event => {
 
 // ---- FETCH: cache-first, fall back to network ----
 self.addEventListener('fetch', event => {
-  // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
 
-      // Not in cache — try network, then cache the response
       return fetch(event.request).then(networkResponse => {
-        // Only cache valid responses
         if (
           networkResponse &&
           networkResponse.status === 200 &&
@@ -68,9 +66,8 @@ self.addEventListener('fetch', event => {
         }
         return networkResponse;
       }).catch(() => {
-        // Network failed and not in cache — return offline fallback for navigation
         if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
+          return caches.match(BASE + '/index.html');
         }
       });
     })

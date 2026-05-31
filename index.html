@@ -512,7 +512,7 @@
     <div class="card-title">👑 Queen of the Court</div>
     <div class="rules-box"><p>
       <strong>Max 3 dribbles</strong> per possession. Ball held 5 sec = defence wins automatically.<br>
-      <strong>Score: +2 &nbsp;|&nbsp; Defensive Stop: +2 &nbsp;|&nbsp; Jump shot bonus: +1 &nbsp;|&nbsp; Great shot bonus: +2</strong><br>
+      <strong>Score: +2 &nbsp;|&nbsp; Defence Stop: +2 &nbsp;|&nbsp; Jump Shot bonus: +1 &nbsp;|&nbsp; Great Shot bonus: +2</strong><br>
       Off rebound or Def rebound = same player stays, no points.
     </p></div>
     <div class="timer-display" id="qTimer">7:00</div>
@@ -520,7 +520,10 @@
       <button class="btn btn-primary" id="qStartBtn" onclick="qStartStop()">▶ Start</button>
       <button class="btn btn-secondary" onclick="qReset()">↺ Reset</button>
       <select id="qTimerSelect" onchange="qSetTime(this.value)">
-        <option value="420">7 min</option>
+        <option value="600">10 min</option>
+        <option value="540">9 min</option>
+        <option value="480">8 min</option>
+        <option value="420" selected>7 min</option>
         <option value="360">6 min</option>
         <option value="300">5 min</option>
       </select>
@@ -531,6 +534,23 @@
     <div class="card-title">Player Scores</div>
     <div class="player-grid" id="qScoreGrid"></div>
   </div>
+
+  <!-- CONFIRM & LOCK-IN -->
+  <div class="card" id="qConfirmCard">
+    <div class="card-title">Confirm & Lock In Scores</div>
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">Review scores below before sending to the final tally. Once locked in they can't be changed here.</p>
+    <div id="qConfirmList"></div>
+    <div class="flex-row mt12">
+      <button class="btn btn-green btn-lg" onclick="qLockIn()">🔒 Lock In to Final Tally</button>
+    </div>
+  </div>
+
+  <!-- QUEEN TALLY (shown after lock-in) -->
+  <div class="card" id="qTallyCard" style="display:none;">
+    <div class="card-title">👑 Queen of the Court — Final Tally</div>
+    <div id="qTallyContent"></div>
+    <button class="btn btn-secondary btn-sm mt12" onclick="qUnlock()">↩ Unlock & Edit</button>
+  </div>
 </div>
 
 <!-- ===================== DRIBBLE GAUNTLET ===================== -->
@@ -538,8 +558,12 @@
   <div class="card">
     <div class="card-title">⚡ Dribble Gauntlet</div>
     <div class="rules-box"><p>
-      <strong>Course:</strong> Crossover cone → Retreat dribble → Spin move → Finish (coach defends!)<br>
-      <strong>1st: 10pts &nbsp;|&nbsp; 2nd: 7pts &nbsp;|&nbsp; 3rd: 5pts &nbsp;|&nbsp; 4th–7th: 4pts each</strong>
+      <strong>Course:</strong><br>
+      1️⃣ <strong>Weak hand slalom</strong> — dribble weak hand only through cones to half court<br>
+      2️⃣ <strong>Crossover through each leg</strong> — alternating between-the-legs dribbles through cones<br>
+      3️⃣ <strong>Spin around cone</strong> — spin move around the final cone<br>
+      4️⃣ <strong>Make a shot</strong> — finish with a made basket (must make before time recorded!)<br>
+      Coach lightly defends at the finish. <strong>1st: 10pts &nbsp;|&nbsp; 2nd: 7pts &nbsp;|&nbsp; 3rd: 5pts &nbsp;|&nbsp; 4th–7th: 4pts</strong>
     </p></div>
     <div class="timer-display" id="gTimer">0.0s</div>
     <div class="timer-controls">
@@ -634,10 +658,15 @@ PLAYERS.forEach(p => scores[p] = { hotshot:0, ctf:0, queen:0, gauntlet:0, threep
 // Teams
 let teamA = ['Hattie','Ivy','Maddy','Ada'];
 let teamB = ['Saskia','Izzy','Lily'];
+let teamC = []; // Hot Shot Team C = Corner group
 
 // HS groups: which players are at which station this round
 // hsGroups[round][station] = [players]
 let hsGroupAssign = { wing:[], elbow:[], corner:[] }; // starting assignments
+
+// Hot Shot team bonus points (accumulated across sets)
+let hsTeamPoints = { wing: 0, elbow: 0, corner: 0 }; // bonus pts per group/team
+let hsSetNumber = 1; // which set of 3 rounds we're on
 
 // SESSION CLOCK
 let sessionSeconds = 2400, sessionRunning = false, sessionInterval = null;
@@ -848,6 +877,7 @@ function renderHsRoundDots() {
     dot.className = 'round-dot'+(i<hsRound?' done':i===hsRound?' active':'');
     d.appendChild(dot);
   }
+  document.getElementById('hsStationBadge').textContent = `Set ${hsSetNumber} · Round ${hsRound}`;
 }
 
 function renderHsGroups() {
@@ -882,8 +912,9 @@ function renderHsGroups() {
           <button class="pm-btn pm-minus" onclick="hsAdj('${p}',-1)">−</button>
           <button class="pm-btn pm-plus" onclick="hsAdj('${p}',1)">+</button>
         </div>
-        <div style="margin-top:6px;">
+        <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px;">
           <button class="btn btn-gold btn-sm" style="width:100%;font-size:10px;" onclick="hsCallSteal('${p}')">🎯 Steal</button>
+          <button class="btn btn-sm" style="width:100%;font-size:10px;background:rgba(255,77,109,0.2);color:var(--accent);border:1px solid var(--accent);" onclick="hsCallHeatCheck('${p}')">🔥 Heat Check</button>
         </div>
       `;
       grid.appendChild(d);
@@ -895,14 +926,18 @@ function renderHsGroups() {
 
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
+function hsPauseClock() {
+  if(hsRunning) {
+    hsRunning = false;
+    clearInterval(hsInterval);
+    document.getElementById('hsStartBtn').textContent = '▶ Start';
+  }
+}
+
 function hsAdj(player, delta) {
   if(delta > 0) {
     scores[player].hotshot += delta;
     hsStreaks[player]++;
-    if(hsStreaks[player] >= 3) {
-      showSpotlight('🔥','HEAT CHECK!', `${player} — 3 in a row! Step back shot = +5 pts`);
-      hsStreaks[player] = 0;
-    }
   } else {
     scores[player].hotshot = Math.max(0, scores[player].hotshot + delta);
     hsStreaks[player] = 0;
@@ -911,7 +946,31 @@ function hsAdj(player, delta) {
   renderHsTeamSummary();
 }
 
+function hsCallHeatCheck(player) {
+  hsPauseClock();
+  document.getElementById('spotlightIcon').textContent = '🔥';
+  document.getElementById('spotlightTitle').textContent = 'HEAT CHECK!';
+  document.getElementById('spotlightSub').textContent = `${player} — step back shot worth +5 pts!`;
+  document.getElementById('spotlightButtons').innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+      <button class="btn btn-green btn-lg" onclick="hsHeatCheckResult('${player}',true)">🔥 MADE — +5 pts</button>
+      <button class="btn btn-primary btn-lg" onclick="hsHeatCheckResult('${player}',false)">❌ MISSED</button>
+    </div>`;
+  document.getElementById('spotlight').classList.add('show');
+}
+
+function hsHeatCheckResult(player, made) {
+  if(made) {
+    scores[player].hotshot += 5;
+  }
+  hsStreaks[player] = 0;
+  closeSpotlight();
+  renderHsGroups();
+  renderHsTeamSummary();
+}
+
 function hsCallSteal(caller) {
+  hsPauseClock();
   const grid = document.getElementById('stealTargetGrid');
   grid.innerHTML = '';
   document.getElementById('stealTitle').textContent = `${caller} calls STEAL!`;
@@ -952,7 +1011,10 @@ function hsStealResult(caller, target, made) {
   renderHsTeamSummary();
 }
 
-function closeStealOverlay() { document.getElementById('stealOverlay').classList.remove('show'); }
+function closeStealOverlay() {
+  document.getElementById('stealOverlay').classList.remove('show');
+  // Clock was paused when steal was called — coach needs to manually resume
+}
 
 function showSpotlight(icon, title, sub) {
   if(hsRunning) { hsRunning=false; clearInterval(hsInterval); document.getElementById('hsStartBtn').textContent='▶ Start'; }
@@ -1001,13 +1063,12 @@ function hsReset() {
 function hsNextRound() {
   if(hsRound < 3) {
     hsRound++;
-    const labels=['Round 1','Round 2','Round 3'];
-    document.getElementById('hsStationBadge').textContent = labels[hsRound-1];
     PLAYERS.forEach(p => hsStreaks[p]=0);
     hsReset();
     renderHsRoundDots();
     renderHsGroups();
   } else {
+    // End of a set of 3 rounds — award team bonus then offer next set
     applyHsTeamBonus();
   }
 }
@@ -1015,35 +1076,107 @@ function hsNextRound() {
 function renderHsTeamSummary() {
   const el = document.getElementById('hsTeamSummaryContent');
   if(!el) return;
-  const totA = teamA.reduce((s,p)=>s+scores[p].hotshot,0);
-  const totB = teamB.reduce((s,p)=>s+scores[p].hotshot,0);
-  const winner = totA > totB ? 'Team A' : totB > totA ? 'Team B' : 'Tied';
+
+  // Each group is a team — sum their hotshot scores
+  const teamScores = {
+    wing:  hsGroupAssign.wing.reduce((s,p)=>s+scores[p].hotshot,0),
+    elbow: hsGroupAssign.elbow.reduce((s,p)=>s+scores[p].hotshot,0),
+    corner:hsGroupAssign.corner.reduce((s,p)=>s+scores[p].hotshot,0),
+  };
+
+  const teams = [
+    { key:'wing',  label:'🔴 Wing',   color:'var(--accent)',  score: teamScores.wing,  bonus: hsTeamPoints.wing  },
+    { key:'elbow', label:'🟡 Elbow',  color:'var(--accent2)', score: teamScores.elbow, bonus: hsTeamPoints.elbow },
+    { key:'corner',label:'🟢 Corner', color:'var(--accent3)', score: teamScores.corner,bonus: hsTeamPoints.corner },
+  ];
+
+  const sorted = [...teams].sort((a,b)=>b.score-a.score);
+  const leader = sorted[0];
+
   el.innerHTML = `
-    <div class="summary-row"><span>🔴 Team A</span><span style="color:var(--accent);font-family:'Bebas Neue',cursive;font-size:22px;">${totA}</span></div>
-    <div class="summary-row"><span>🔵 Team B</span><span style="color:var(--accent4);font-family:'Bebas Neue',cursive;font-size:22px;">${totB}</span></div>
-    <div class="summary-row"><span style="color:var(--text-muted)">Leading</span><span class="summary-winner">${winner}</span></div>
+    <div class="section-label" style="margin-bottom:8px;">Round Scores (this set)</div>
+    ${teams.map(t=>`
+      <div class="summary-row">
+        <span style="font-weight:700;color:${t.color}">${t.label}</span>
+        <div style="display:flex;gap:12px;align-items:center;">
+          <span style="font-family:'Bebas Neue',cursive;font-size:22px;color:${t.color}">${t.score}</span>
+          ${t.bonus>0?`<span class="badge badge-gold">+${t.bonus} team pts</span>`:''}
+        </div>
+      </div>
+    `).join('')}
+    <div class="summary-row" style="margin-top:4px;">
+      <span style="color:var(--text-muted);">Leading</span>
+      <span class="summary-winner">${leader.label}</span>
+    </div>
+    ${hsTeamPoints.wing>0||hsTeamPoints.elbow>0||hsTeamPoints.corner>0?`
+    <div class="sep"></div>
+    <div class="section-label" style="margin-bottom:8px;">Accumulated Team Bonus Points</div>
+    ${teams.map(t=>`
+      <div class="summary-row">
+        <span style="color:${t.color}">${t.label}</span>
+        <span style="font-family:'Bebas Neue',cursive;font-size:18px;color:var(--accent2);">${t.bonus} pts</span>
+      </div>
+    `).join('')}
+    `:''}
+    <div class="sep"></div>
+    <div class="section-label" style="margin-bottom:6px;">Individual Scores</div>
     ${PLAYERS.map(p=>`<div class="summary-row"><span>${p}</span><span>${scores[p].hotshot}</span></div>`).join('')}
   `;
 }
 
 function applyHsTeamBonus() {
-  const totA = teamA.reduce((s,p)=>s+scores[p].hotshot,0);
-  const totB = teamB.reduce((s,p)=>s+scores[p].hotshot,0);
-  const winLabel = totA >= totB ? 'Team A' : 'Team B';
+  const teamScores = {
+    wing:  hsGroupAssign.wing.reduce((s,p)=>s+scores[p].hotshot,0),
+    elbow: hsGroupAssign.elbow.reduce((s,p)=>s+scores[p].hotshot,0),
+    corner:hsGroupAssign.corner.reduce((s,p)=>s+scores[p].hotshot,0),
+  };
+  const max = Math.max(teamScores.wing, teamScores.elbow, teamScores.corner);
+  const winners = Object.entries(teamScores).filter(([,v])=>v===max).map(([k])=>k);
+  const winnerLabels = { wing:'🔴 Wing', elbow:'🟡 Elbow', corner:'🟢 Corner' };
+  const winLabel = winners.map(w=>winnerLabels[w]).join(' & ');
+
   document.getElementById('hsTeamBonus').style.display='block';
   document.getElementById('hsTeamBonusContent').innerHTML = `
-    <p style="margin-bottom:10px;">Team A: <strong>${totA}</strong> &nbsp;|&nbsp; Team B: <strong>${totB}</strong></p>
-    <p style="color:var(--accent2);margin-bottom:12px;"><strong>${winLabel} wins! Each player +2pts</strong></p>
-    <button class="btn btn-gold" onclick="giveHsTeamBonus('${winLabel}')">Apply +2 to ${winLabel}</button>
+    <p style="margin-bottom:8px;">
+      🔴 Wing: <strong>${teamScores.wing}</strong> &nbsp;|&nbsp;
+      🟡 Elbow: <strong>${teamScores.elbow}</strong> &nbsp;|&nbsp;
+      🟢 Corner: <strong>${teamScores.corner}</strong>
+    </p>
+    <p style="color:var(--accent2);margin-bottom:12px;"><strong>Set ${hsSetNumber} winner${winners.length>1?'s':''}: ${winLabel}! Each player +2 team pts</strong></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-gold" onclick="giveHsTeamBonus(${JSON.stringify(winners)})">Apply +2 to ${winLabel}</button>
+    </div>
   `;
 }
 
-function giveHsTeamBonus(team) {
-  const players = team==='Team A' ? teamA : teamB;
-  players.forEach(p => scores[p].hotshot += 2);
+function giveHsTeamBonus(winners) {
+  winners.forEach(group => {
+    hsTeamPoints[group] += 2;
+    hsGroupAssign[group].forEach(p => scores[p].hotshot += 2);
+  });
   renderHsGroups();
   renderHsTeamSummary();
-  document.getElementById('hsTeamBonusContent').innerHTML += `<p class="mt8" style="color:var(--accent3);">✅ Bonus applied!</p>`;
+  document.getElementById('hsTeamBonusContent').innerHTML += `
+    <p class="mt8" style="color:var(--accent3);">✅ Team bonus applied!</p>
+    <div class="sep"></div>
+    <p style="margin-bottom:10px;color:var(--text-muted);">Want to play another set of 3 rounds? Points keep adding up.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="hsStartNewSet()">▶ Play Set ${hsSetNumber+1}</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('hsTeamBonus').style.display='none'">Done</button>
+    </div>
+  `;
+}
+
+function hsStartNewSet() {
+  hsSetNumber++;
+  hsRound = 1;
+  PLAYERS.forEach(p => hsStreaks[p] = 0);
+  document.getElementById('hsTeamBonus').style.display = 'none';
+  hsReset();
+  renderHsRoundDots();
+  renderHsGroups();
+  renderHsTeamSummary();
+  showSpotlight('🏀', `SET ${hsSetNumber} BEGINS!`, 'Rotate starting stations! Points keep adding.');
 }
 
 // ============================================================
@@ -1176,6 +1309,9 @@ function applyCtfBonus(team) {
 // ============================================================
 // QUEEN OF THE COURT
 // ============================================================
+let qLocked = false;
+let qLockedScores = {}; // snapshot at lock-in time
+
 function renderQScores() {
   const g = document.getElementById('qScoreGrid');
   if(!g) return;
@@ -1187,18 +1323,91 @@ function renderQScores() {
       <div class="player-name">${p}</div>
       <div class="player-score">${scores[p].queen}</div>
       <div class="player-label">pts</div>
-      <div class="pm-row">
-        <button class="pm-btn pm-minus" onclick="qAdj('${p}',-1)">−</button>
-        <button class="pm-btn pm-plus" onclick="qAdj('${p}',1)">+</button>
+      <div class="pm-row" style="margin-top:6px;">
+        <button class="pm-btn pm-minus" onclick="qAdj('${p}',-1)" ${qLocked?'disabled':''}>−</button>
+        <button class="pm-btn pm-plus" onclick="qAdj('${p}',1)" ${qLocked?'disabled':''}>+</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">
+        <button class="btn btn-sm" style="background:rgba(255,77,109,0.2);color:var(--accent);border:1px solid var(--accent);font-size:10px;" onclick="qScore('${p}')" ${qLocked?'disabled':''}>🏀 Score<br>+2</button>
+        <button class="btn btn-sm" style="background:rgba(76,201,240,0.2);color:var(--accent4);border:1px solid var(--accent4);font-size:10px;" onclick="qDefence('${p}')" ${qLocked?'disabled':''}>🛡 Defence<br>+2</button>
+        <button class="btn btn-sm" style="background:rgba(255,183,3,0.15);color:var(--accent2);border:1px solid var(--accent2);font-size:10px;" onclick="qJumpShot('${p}')" ${qLocked?'disabled':''}>↑ Jump<br>+1</button>
+        <button class="btn btn-sm" style="background:rgba(6,214,160,0.15);color:var(--accent3);border:1px solid var(--accent3);font-size:10px;" onclick="qGreatShot('${p}')" ${qLocked?'disabled':''}>⭐ Great<br>+2</button>
       </div>
     `;
     g.appendChild(d);
   });
+  renderQConfirm();
 }
 
 function qAdj(player, delta) {
-  scores[player].queen = Math.max(0, scores[player].queen+delta);
+  if(qLocked) return;
+  scores[player].queen = Math.max(0, scores[player].queen + delta);
   renderQScores();
+}
+
+function qScore(player) {
+  if(qLocked) return;
+  scores[player].queen += 2;
+  renderQScores();
+}
+
+function qDefence(player) {
+  if(qLocked) return;
+  scores[player].queen += 2;
+  renderQScores();
+}
+
+function qJumpShot(player) {
+  if(qLocked) return;
+  scores[player].queen += 1;
+  renderQScores();
+}
+
+function qGreatShot(player) {
+  if(qLocked) return;
+  scores[player].queen += 2;
+  renderQScores();
+}
+
+function renderQConfirm() {
+  const el = document.getElementById('qConfirmList');
+  if(!el) return;
+  const sorted = [...PLAYERS].sort((a,b) => scores[b].queen - scores[a].queen);
+  el.innerHTML = sorted.map((p,i) => `
+    <div class="summary-row">
+      <span style="font-weight:700;">${i===0?'👑 ':i===1?'🥈 ':i===2?'🥉 ':''}${p}</span>
+      <span style="font-family:'Bebas Neue',cursive;font-size:22px;color:var(--accent2);">${scores[p].queen} pts</span>
+    </div>
+  `).join('');
+
+  // Show/hide confirm card based on lock state
+  document.getElementById('qConfirmCard').style.display = qLocked ? 'none' : 'block';
+  document.getElementById('qTallyCard').style.display = qLocked ? 'block' : 'none';
+}
+
+function qLockIn() {
+  qLocked = true;
+  PLAYERS.forEach(p => qLockedScores[p] = scores[p].queen);
+  renderQScores();
+  renderQTally();
+}
+
+function qUnlock() {
+  qLocked = false;
+  renderQScores();
+}
+
+function renderQTally() {
+  const el = document.getElementById('qTallyContent');
+  if(!el) return;
+  const sorted = [...PLAYERS].sort((a,b) => scores[b].queen - scores[a].queen);
+  el.innerHTML = sorted.map((p,i) => `
+    <div class="leaderboard-row ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':''}">
+      <div class="rank-num">${i===0?'👑':i===1?'🥈':i===2?'🥉':i+1}</div>
+      <div class="rank-name">${p}</div>
+      <div class="rank-pts">${scores[p].queen}</div>
+    </div>
+  `).join('');
 }
 
 function qStartStop() {
@@ -1217,7 +1426,7 @@ function qStartStop() {
         clearInterval(qInterval); qRunning=false;
         el.textContent='0:00';
         document.getElementById('qStartBtn').textContent='▶ Start';
-        showSpotlight('⏰','TIME!','Queen of the Court is over!');
+        showSpotlight('⏰','TIME!','Queen of the Court is over! Confirm and lock in scores.');
       }
     },1000);
   }

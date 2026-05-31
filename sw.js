@@ -5,7 +5,7 @@
 // an update to GitHub. The old cache will be cleared and
 // the new files will be downloaded automatically on next load.
 // ============================================================
-const CACHE_VERSION = 'carnival-v3';
+const CACHE_VERSION = 'carnival-v6';
 const BASE_URL = 'https://transitdork.github.io/carnival-round';
 
 const ASSETS_TO_CACHE = [

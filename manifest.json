@@ -2,21 +2,21 @@
   "name": "Carnival Round — U13 Girls",
   "short_name": "Carnival",
   "description": "Basketball carnival training session scorer and timer",
-  "start_url": "/carnival-round/index.html",
-  "scope": "/carnival-round/",
+  "start_url": "https://transitdork.github.io/carnival-round/index.html",
+  "scope": "https://transitdork.github.io/carnival-round/",
   "display": "standalone",
   "background_color": "#0d0d14",
   "theme_color": "#ff4d6d",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "icons/icon-192.png",
+      "src": "https://transitdork.github.io/carnival-round/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "icons/icon-512.png",
+      "src": "https://transitdork.github.io/carnival-round/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

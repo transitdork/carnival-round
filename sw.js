@@ -5,14 +5,14 @@
 // an update to GitHub. The old cache will be cleared and
 // the new files will be downloaded automatically on next load.
 // ============================================================
-const CACHE_VERSION = 'carnival-v1';
-const BASE = '/carnival-round';
+const CACHE_VERSION = 'carnival-v3';
+const BASE_URL = 'https://transitdork.github.io/carnival-round';
 
 const ASSETS_TO_CACHE = [
-  BASE + '/index.html',
-  BASE + '/manifest.json',
-  BASE + '/icons/icon-192.png',
-  BASE + '/icons/icon-512.png',
+  BASE_URL + '/index.html',
+  BASE_URL + '/manifest.json',
+  BASE_URL + '/icons/icon-192.png',
+  BASE_URL + '/icons/icon-512.png',
   'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap',
 ];
 
@@ -21,11 +21,11 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_VERSION).then(cache => {
       return cache.addAll([
-        BASE + '/index.html',
-        BASE + '/manifest.json',
+        BASE_URL + '/index.html',
+        BASE_URL + '/manifest.json',
       ]).then(() => {
         return Promise.allSettled(
-          ASSETS_TO_CACHE.filter(url => url.startsWith('https')).map(url =>
+          ASSETS_TO_CACHE.filter(url => url.startsWith('https://fonts')).map(url =>
             fetch(url).then(res => cache.put(url, res)).catch(() => {})
           )
         );
@@ -67,7 +67,7 @@ self.addEventListener('fetch', event => {
         return networkResponse;
       }).catch(() => {
         if (event.request.mode === 'navigate') {
-          return caches.match(BASE + '/index.html');
+          return caches.match(BASE_URL + '/index.html');
         }
       });
     })

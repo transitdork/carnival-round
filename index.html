@@ -1475,7 +1475,7 @@ function init() {
 
   let newWorker = null;
 
-  navigator.serviceWorker.register('/carnival-round/sw.js', { scope: '/carnival-round/' }).then(reg => {
+  navigator.serviceWorker.register('https://transitdork.github.io/carnival-round/sw.js', { scope: 'https://transitdork.github.io/carnival-round/' }).then(reg => {
 
     // Check for updates every time the page gains focus
     document.addEventListener('visibilitychange', () => {

@@ -1,0 +1,85 @@
+// ============================================================
+// SERVICE WORKER — Carnival Round PWA
+// ============================================================
+// IMPORTANT: Bump this version string every time you push
+// an update to GitHub. The old cache will be cleared and
+// the new files will be downloaded automatically on next load.
+// ============================================================
+const CACHE_VERSION = 'carnival-v1';
+
+const ASSETS_TO_CACHE = [
+  '/index.html',
+  '/manifest.json',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  // Google Fonts — cached on first load, served offline after
+  'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap',
+];
+
+// ---- INSTALL: cache all assets ----
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_VERSION).then(cache => {
+      // Cache local assets first (must succeed)
+      return cache.addAll(['/index.html', '/manifest.json']).then(() => {
+        // Cache remote assets best-effort (fonts may fail offline on first install)
+        return Promise.allSettled(
+          ASSETS_TO_CACHE.filter(url => url.startsWith('https')).map(url =>
+            fetch(url).then(res => cache.put(url, res)).catch(() => {})
+          )
+        );
+      });
+    }).then(() => self.skipWaiting())
+  );
+});
+
+// ---- ACTIVATE: delete old caches ----
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(
+        keys.filter(key => key !== CACHE_VERSION).map(key => caches.delete(key))
+      )
+    ).then(() => self.clients.claim())
+  );
+});
+
+// ---- FETCH: cache-first, fall back to network ----
+self.addEventListener('fetch', event => {
+  // Only handle GET requests
+  if (event.request.method !== 'GET') return;
+
+  event.respondWith(
+    caches.match(event.request).then(cached => {
+      if (cached) return cached;
+
+      // Not in cache — try network, then cache the response
+      return fetch(event.request).then(networkResponse => {
+        // Only cache valid responses
+        if (
+          networkResponse &&
+          networkResponse.status === 200 &&
+          (networkResponse.type === 'basic' || networkResponse.type === 'cors')
+        ) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_VERSION).then(cache => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      }).catch(() => {
+        // Network failed and not in cache — return offline fallback for navigation
+        if (event.request.mode === 'navigate') {
+          return caches.match('/index.html');
+        }
+      });
+    })
+  );
+});
+
+// ---- MESSAGE: force update from app ----
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
